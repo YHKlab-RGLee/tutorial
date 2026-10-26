@@ -63,15 +63,15 @@ def plot_bands(scf, non_scf=None):
     # C8H16: 48 valence electrons, 24 doubly occupied bands.
     nocc = 24
     zero = reference[:, nocc-1].max()
-    fig, ax = plt.subplots(figsize=(5,5), constrained_layout=True)
+    fig, ax = plt.subplots(figsize=(7,6), constrained_layout=True)
     cases = [('SCF', k, reference, 'black', '-')]
     if non_scf is not None:
         km, ml = read_bands(non_scf)
         assert ml.shape == reference.shape and np.allclose(km,k)
         cases.append(('DeepSCF / non-SCF', km, ml, 'tab:red', '--'))
     for label, axis, energy, color, style in cases:
-        # Display a small window of frontier bands.
-        ax.plot(axis, energy[:, nocc-4:nocc+4] - zero, color=color, ls=style, lw=1.2)
+        # Display 12 occupied and 12 unoccupied bands around the gap.
+        ax.plot(axis, energy[:, nocc-12:nocc+12] - zero, color=color, ls=style, lw=1.2)
         ax.plot([], [], color=color, ls=style, label=label)
         gap = energy[:,nocc].min() - energy[:,nocc-1].max()
         print('%s gap along sampled Gamma-X path: %.6f eV' % (label,gap))
