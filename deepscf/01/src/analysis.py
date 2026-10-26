@@ -58,7 +58,7 @@ def read_bands(directory):
     return np.asarray(k), values[:,0,:] + reader.read_fermi_level()
 
 
-def plot_bands(scf, non_scf=None):
+def plot_bands(scf, non_scf=None, initial=None):
     k, reference = read_bands(scf)
     # C8H16: 48 valence electrons, 24 doubly occupied bands.
     nocc = 24
@@ -69,6 +69,10 @@ def plot_bands(scf, non_scf=None):
         km, ml = read_bands(non_scf)
         assert ml.shape == reference.shape and np.allclose(km,k)
         cases.append(('DeepSCF / non-SCF', km, ml, 'tab:red', '--'))
+    if initial is not None:
+        ki, ei = read_bands(initial)
+        assert ei.shape == reference.shape and np.allclose(ki, k)
+        cases.append(('Initial / non-SCF', ki, ei, 'tab:blue', ':'))
     for label, axis, energy, color, style in cases:
         # Display 12 occupied and 12 unoccupied bands around the gap.
         ax.plot(axis, energy[:, nocc-12:nocc+12] - zero, color=color, ls=style, lw=1.2)
@@ -83,15 +87,74 @@ def plot_bands(scf, non_scf=None):
     return fig
 
 
-def compare_energy(scf, non_scf):
-    # Use the same final Kohn-Sham total-energy field in both logs.
-    def energy(directory):
-        text = (Path(directory)/'stdout.txt').read_text(errors='replace')
-        values = re.findall(r'^siesta:\s+Total\s*=\s*([-+0-9.EeDd]+)',text,re.M)
-        if not values:
-            raise ValueError('Final siesta: Total energy not found in '+str(directory))
-        return float(values[-1].replace('D','E').replace('d','e'))
-    a,b=energy(scf),energy(non_scf)
-    print('SCF total energy:      %.8f eV' % a)
-    print('non-SCF total energy:  %.8f eV' % b)
-    print('|Delta E| / atom:      %.6f meV/atom' % (abs(b-a)/24*1000))
+def read_energy(directory):
+    text = (Path(directory) / 'stdout.txt').read_text(errors='replace')
+    values = re.findall(r'^siesta:\s+Total\s*=\s*([-+0-9.EeDd]+)', text, re.M)
+    if not values:
+        raise ValueError('Final siesta: Total energy not found in ' + str(directory))
+    return float(values[-1].replace('D', 'E').replace('d', 'e'))
+
+
+def read_forces(directory):
+    path = Path(directory) / 'Molecular.FA'
+    count = int(path.read_text().splitlines()[0])
+    data = np.loadtxt(path, skiprows=1, ndmin=2)
+    assert data.shape == (count, 4) and np.isfinite(data).all()
+    np.testing.assert_array_equal(data[:, 0], np.arange(1, count + 1))
+    return data[:, 1:]
+
+
+def compare_observables(scf, initial, non_scf, predicted):
+    scf = Path(scf)
+    ref = density(scf / 'Molecular.RHO')
+    e_ref, f_ref = read_energy(scf), read_forces(scf)
+    cases = [('rho_init', initial, scf / 'rhoatom'),
+             ('rho_ML', non_scf, predicted),
+             ('rho_SCF', scf, scf / 'Molecular.RHO')]
+    columns = []
+    for label, directory, rho in cases:
+        grid = density(rho)
+        assert grid.shape == ref.shape and np.allclose(grid.cell, ref.cell)
+        forces = read_forces(directory)
+        assert forces.shape == f_ref.shape
+        energy = read_energy(directory)
+        delta = forces - f_ref
+        columns.append([
+            'Converged SCF' if label == 'rho_SCF' else 'One-step non-SCF',
+            f'{100 * np.abs(grid.grid-ref.grid).sum()/ref.grid.sum():.6f}',
+            f'{energy:.8f}',
+            f'{abs(energy-e_ref)/len(f_ref)*1000:.6f}',
+            f'{np.sqrt(np.mean(delta**2)):.6f}',
+            f'{np.linalg.norm(delta, axis=1).max():.6f}',
+            f'{np.linalg.norm(forces, axis=1).max():.6f}',
+        ])
+    labels = ['Calculation', 'Input density error (%)', 'Total energy (eV)',
+              'Absolute energy error (meV/atom)', 'Force component RMSE (eV/Å)',
+              'Maximum force-vector error (eV/Å)', 'Maximum force magnitude (eV/Å)']
+    lines = ['| Quantity | ρ_init | ρ_ML | ρ_SCF |', '|---|---:|---:|---:|']
+    lines += ['| ' + name + ' | ' + ' | '.join(values) + ' |'
+              for name, values in zip(labels, zip(*columns))]
+    table = '\n'.join(lines)
+    return table
+
+
+def plot_forces(scf, initial, non_scf):
+    ref = read_forces(scf)
+    cases = [('ρ_init', read_forces(initial), 'tab:blue', ':'),
+             ('ρ_ML', read_forces(non_scf), 'tab:red', '--'),
+             ('ρ_SCF', ref, 'black', '-')]
+    fig, axes = plt.subplots(2, 1, figsize=(9, 7), constrained_layout=True)
+    atoms = np.arange(1, len(ref) + 1)
+    for label, forces, color, style in cases:
+        axes[0].plot(atoms, np.linalg.norm(forces, axis=1), style, color=color,
+                     marker='.', label=label)
+        axes[1].plot(atoms, np.linalg.norm(forces-ref, axis=1), style, color=color,
+                     marker='.', label=label)
+    axes[0].set(ylabel='Force magnitude (eV/Å)')
+    axes[1].set(xlabel='Atom index', ylabel='Force-vector error vs SCF (eV/Å)')
+    for ax in axes:
+        ax.set_yscale('symlog', linthresh=1e-3)
+        ax.legend()
+        ax.set_xlim(1, len(ref))
+    plt.show()
+    return fig
