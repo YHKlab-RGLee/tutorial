@@ -14,13 +14,14 @@ def density(path):
     return grid  # sisl returns electron density in e / Ang^3.
 
 
-def plot_density(reference, atomic=None, prediction=None):
-    ref = density(reference)
+def plot_density(initial=None, ml=None, scf=None):
+    """Plot density files in initial, ML, SCF order; scf is required."""
+    ref = density(scf)
     grids = [('SCF', ref)]
-    if atomic is not None:
-        grids.insert(0, ('Atomic', density(atomic)))
-    if prediction is not None:
-        grids.insert(-1, ('DeepSCF', density(prediction)))
+    if initial is not None:
+        grids.insert(0, ('Atomic', density(initial)))
+    if ml is not None:
+        grids.insert(-1, ('DeepSCF', density(ml)))
     for _, grid in grids:
         assert grid.shape == ref.shape
         assert np.allclose(grid.cell, ref.cell)
@@ -28,8 +29,8 @@ def plot_density(reference, atomic=None, prediction=None):
     assert np.allclose(ref.cell, np.diag(cell))
     dy = cell[1] / ref.shape[1]
     projected = [(label, g.grid.sum(axis=1) * dy) for label, g in grids]
-    if prediction is not None:
-        diff = density(prediction).grid - ref.grid
+    if ml is not None:
+        diff = density(ml).grid - ref.grid
         projected.append(('DeepSCF - SCF', diff.sum(axis=1) * dy))
     fig, axes = plt.subplots(1, len(projected), figsize=(4*len(projected), 4), constrained_layout=True, squeeze=False)
     vmax = max(values.max() for label, values in projected if label != 'DeepSCF - SCF')
@@ -58,21 +59,22 @@ def read_bands(directory):
     return np.asarray(k), values[:,0,:] + reader.read_fermi_level()
 
 
-def plot_bands(scf, non_scf=None, initial=None):
+def plot_bands(initial=None, ml=None, scf=None):
+    """Plot run directories in initial, ML, SCF order; scf is required."""
     k, reference = read_bands(scf)
     # C8H16: 48 valence electrons, 24 doubly occupied bands.
     nocc = 24
     zero = reference[:, nocc-1].max()
     fig, ax = plt.subplots(figsize=(7,6), constrained_layout=True)
-    cases = [('SCF', k, reference, 'black', '-')]
-    if non_scf is not None:
-        km, ml = read_bands(non_scf)
-        assert ml.shape == reference.shape and np.allclose(km,k)
-        cases.append(('DeepSCF / non-SCF', km, ml, 'tab:red', '--'))
+    cases = [('ρ_SCF', k, reference, 'black', '-')]
+    if ml is not None:
+        km, ml_bands = read_bands(ml)
+        assert ml_bands.shape == reference.shape and np.allclose(km,k)
+        cases.insert(0, ('ρ_ML', km, ml_bands, 'tab:red', '--'))
     if initial is not None:
         ki, ei = read_bands(initial)
         assert ei.shape == reference.shape and np.allclose(ki, k)
-        cases.append(('Initial / non-SCF', ki, ei, 'tab:blue', ':'))
+        cases.insert(0, ('ρ_init', ki, ei, 'tab:blue', ':'))
     for label, axis, energy, color, style in cases:
         # Display 12 occupied and 12 unoccupied bands around the gap.
         ax.plot(axis, energy[:, nocc-12:nocc+12] - zero, color=color, ls=style, lw=1.2)
@@ -104,12 +106,13 @@ def read_forces(directory):
     return data[:, 1:]
 
 
-def compare_observables(scf, initial, non_scf, predicted):
+def compare_observables(initial, ml, scf):
+    """Compare run directories in initial, ML, SCF order."""
     scf = Path(scf)
     ref = density(scf / 'Molecular.RHO')
     e_ref, f_ref = read_energy(scf), read_forces(scf)
-    cases = [('rho_init', initial, scf / 'rhoatom'),
-             ('rho_ML', non_scf, predicted),
+    cases = [('rho_init', initial, Path(initial) / 'In.RHO'),
+             ('rho_ML', ml, Path(ml) / 'In.RHO'),
              ('rho_SCF', scf, scf / 'Molecular.RHO')]
     columns = []
     for label, directory, rho in cases:
@@ -138,10 +141,11 @@ def compare_observables(scf, initial, non_scf, predicted):
     return table
 
 
-def plot_forces(scf, initial, non_scf):
+def plot_forces(initial, ml, scf):
+    """Plot run directories in initial, ML, SCF order."""
     ref = read_forces(scf)
     cases = [('ρ_init', read_forces(initial), 'tab:blue', ':'),
-             ('ρ_ML', read_forces(non_scf), 'tab:red', '--'),
+             ('ρ_ML', read_forces(ml), 'tab:red', '--'),
              ('ρ_SCF', ref, 'black', '-')]
     fig, axes = plt.subplots(2, 1, figsize=(9, 7), constrained_layout=True)
     atoms = np.arange(1, len(ref) + 1)
