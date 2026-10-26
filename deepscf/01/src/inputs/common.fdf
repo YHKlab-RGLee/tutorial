@@ -31,6 +31,7 @@ DM.Tolerance 1.d-4
 DM.UseSaveDM F
 MD.TypeOfRun CG
 MD.NumCGsteps 0
+WriteForces T
 SaveRho T
 SaveIonicCharge T
 
