@@ -1,0 +1,5 @@
+%include common.fdf
+SCF.Read.Charge T
+MaxSCFIterations 1
+SCF.Mix.First F
+SCF.MustConverge F

@@ -1,0 +1,42 @@
+SystemName Polymer
+SystemLabel Molecular
+%include STRUCT.fdf
+
+PAO.BasisType split
+PAO.BasisSize DZP
+PAO.EnergyShift 30 meV
+PAO.SplitNorm 0.15
+XC.functional GGA
+XC.authors PBE
+
+%block kgrid_Monkhorst_Pack
+ 1 0 0 0.0
+ 0 1 0 0.0
+ 0 0 8 0.0
+%endblock kgrid_Monkhorst_Pack
+
+# Preserve a 0.25 Ang grid for the pretrained model.
+%block MeshSizes
+ 80 80 40
+%endblock MeshSizes
+MeshCutoff 80 Ry
+
+SolutionMethod Diagon
+ElectronicTemperature 300 K
+Diag.ParallelOverK F
+NeglNonOverlapInt F
+DM.MixingWeight 0.25
+DM.NumberPulay 5
+DM.Tolerance 1.d-4
+DM.UseSaveDM F
+MD.TypeOfRun CG
+MD.NumCGsteps 0
+SaveRho T
+SaveIonicCharge T
+
+# X denotes the zone boundary along the polymer axis (z).
+BandLinesScale ReciprocalLatticeVectors
+%block BandLines
+ 1  0.0 0.0 0.0 Gamma
+ 60 0.0 0.0 0.5 X
+%endblock BandLines

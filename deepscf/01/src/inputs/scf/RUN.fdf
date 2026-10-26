@@ -1,0 +1,3 @@
+%include common.fdf
+MaxSCFIterations 300
+SCF.MustConverge T
