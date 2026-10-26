@@ -27,7 +27,7 @@ if a.non_scf:
 else:
     assert re.search(r'SCF cycle converged', log, re.I), 'Reference SCF did not converge.'
     assert 'SCF_NOT_CONV' not in log, 'Reference SCF failed to converge.'
-for name in ('Molecular.RHO', 'Molecular.bands', 'Molecular.EIG'):
+for name in ('Molecular.RHO', 'Molecular.bands', 'Molecular.EIG', 'Molecular.FA'):
     assert (d / name).is_file() and (d / name).stat().st_size > 0, name
 if not a.non_scf:
     for name in ('Molecular.IOCH', 'rhoatom', 'rhoover'):
